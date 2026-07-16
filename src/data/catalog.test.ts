@@ -22,6 +22,7 @@ describe('tools catalog', () => {
       expect.arrayContaining([
         'base-converter',
         'exif-reader',
+        'qr-tool',
         'dp-sp-px',
         'permissions',
         'adb-cheatsheet',

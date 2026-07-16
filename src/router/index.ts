@@ -23,6 +23,13 @@ const router = createRouter({
       meta: { title: 'EXIF 读取' },
     },
     {
+      path: '/qr-tool',
+      name: 'qr-tool',
+      component: () => import('../views/tools/QrToolView.vue'),
+      meta: { title: '二维码' },
+    },
+
+    {
       path: '/dp-sp-px',
       name: 'dp-sp-px',
       component: () => import('../views/tools/DpSpPxView.vue'),

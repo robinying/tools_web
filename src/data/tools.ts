@@ -25,6 +25,15 @@ export const tools: ToolMeta[] = [
     accent: '#10b981',
   },
   {
+    id: 'qr-tool',
+    name: '二维码生成 / 解析',
+    description: '文本生成二维码 PNG；从图片或摄像头本地识别内容。',
+    path: '/qr-tool',
+    tags: ['通用', '图片'],
+    accent: '#22d3ee',
+  },
+
+  {
     id: 'dp-sp-px',
     name: 'dp / sp / px',
     description: 'Android 密度单位换算，按常用 density 快速对照。',

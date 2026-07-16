@@ -14,6 +14,7 @@ const routes = [
   ['/', ['Android 开发工具箱', '进制转换', '权限速查', 'adb 命令速查']],
   ['/base-converter', ['进制转换', '二进制', '十六进制']],
   ['/exif-reader', ['EXIF 读取', '选择图片']],
+  ['/qr-tool', ['二维码', '生成', '解析']],
   ['/dp-sp-px', ['dp / sp / px', 'xxhdpi']],
   ['/permissions', ['权限速查', 'INTERNET']],
   ['/adb-cheatsheet', ['adb 命令速查', 'adb devices']],
