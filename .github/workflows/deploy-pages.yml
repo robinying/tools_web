@@ -1,0 +1,70 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # Project site: https://<user>.github.io/tools_web/
+          # User/org site root: set to /
+          GITHUB_PAGES_BASE: /tools_web/
+
+      - name: Guard against external CDN links in dist
+        run: |
+          set -euo pipefail
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n --hidden -g '!*.map' 'https?://(cdn\.|unpkg\.|jsdelivr|googleapis|gstatic|bootcdn|cdnjs)' dist; then
+              echo "::error::Found forbidden external CDN references in dist/"
+              exit 1
+            fi
+          else
+            if grep -R -n -E 'https?://(cdn\.|unpkg\.|jsdelivr|googleapis|gstatic|bootcdn|cdnjs)' dist --include='*.html' --include='*.js' --include='*.css'; then
+              echo "::error::Found forbidden external CDN references in dist/"
+              exit 1
+            fi
+          fi
+          echo "No forbidden CDN links found."
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

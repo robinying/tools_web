@@ -1,0 +1,46 @@
+[
+  { "category": "设备", "title": "列出设备", "command": "adb devices -l", "note": "查看已连接设备与状态" },
+  { "category": "设备", "title": "指定设备", "command": "adb -s <serial> shell", "note": "多设备时指定序列号" },
+  { "category": "设备", "title": "重启", "command": "adb reboot", "note": "重启设备" },
+  { "category": "设备", "title": "进入 shell", "command": "adb shell", "note": "交互式 shell" },
+
+  { "category": "安装", "title": "安装 APK", "command": "adb install -r path/to/app.apk", "note": "-r 覆盖安装" },
+  { "category": "安装", "title": "卸载", "command": "adb uninstall com.example.app", "note": "按包名卸载" },
+  { "category": "安装", "title": "清除数据", "command": "adb shell pm clear com.example.app", "note": "清空应用数据" },
+  { "category": "安装", "title": "查看包路径", "command": "adb shell pm path com.example.app", "note": "APK 安装路径" },
+
+  { "category": "启动", "title": "启动 Activity", "command": "adb shell am start -n com.example/.MainActivity", "note": "显式组件" },
+  { "category": "启动", "title": "View URL", "command": "adb shell am start -a android.intent.action.VIEW -d \"https://example.com\"", "note": "Deep Link / 浏览器" },
+  { "category": "启动", "title": "强制停止", "command": "adb shell am force-stop com.example.app", "note": "结束进程" },
+  { "category": "启动", "title": "Monkey 随机", "command": "adb shell monkey -p com.example.app -v 500", "note": "简单稳定性" },
+
+  { "category": "日志", "title": "清空 logcat", "command": "adb logcat -c", "note": "清缓冲" },
+  { "category": "日志", "title": "按包过滤(API 24+)", "command": "adb logcat --pid=$(adb shell pidof -s com.example.app)", "note": "仅该进程" },
+  { "category": "日志", "title": "写文件", "command": "adb logcat -d > log.txt", "note": "导出当前缓冲" },
+  { "category": "日志", "title": "崩溃缓冲", "command": "adb logcat -b crash", "note": "crash buffer" },
+
+  { "category": "调试", "title": "截图", "command": "adb exec-out screencap -p > screen.png", "note": "保存到电脑" },
+  { "category": "调试", "title": "录屏", "command": "adb shell screenrecord /sdcard/demo.mp4", "note": "Ctrl+C 结束，再 pull" },
+  { "category": "调试", "title": "输入文本", "command": "adb shell input text \"hello\"", "note": "空格等需转义" },
+  { "category": "调试", "title": "点击坐标", "command": "adb shell input tap 500 800", "note": "x y" },
+  { "category": "调试", "title": "返回键", "command": "adb shell input keyevent 4", "note": "KEYCODE_BACK" },
+  { "category": "调试", "title": "Home 键", "command": "adb shell input keyevent 3", "note": "KEYCODE_HOME" },
+
+  { "category": "文件", "title": "推送文件", "command": "adb push local.bin /sdcard/Download/", "note": "电脑 → 设备" },
+  { "category": "文件", "title": "拉取文件", "command": "adb pull /sdcard/Download/a.txt .", "note": "设备 → 电脑" },
+
+  { "category": "网络", "title": "端口转发", "command": "adb forward tcp:8080 tcp:8080", "note": "本机 8080 → 设备 8080" },
+  { "category": "网络", "title": "反向代理", "command": "adb reverse tcp:8080 tcp:8080", "note": "设备访问本机服务" },
+  { "category": "网络", "title": "无线调试配对", "command": "adb pair <ip>:<port>", "note": "Android 11+ 无线调试" },
+  { "category": "网络", "title": "无线连接", "command": "adb connect <ip>:<port>", "note": "连接无线 adb" },
+
+  { "category": "信息", "title": "Android 版本", "command": "adb shell getprop ro.build.version.release", "note": "系统版本" },
+  { "category": "信息", "title": "SDK Int", "command": "adb shell getprop ro.build.version.sdk", "note": "API Level" },
+  { "category": "信息", "title": "型号", "command": "adb shell getprop ro.product.model", "note": "设备型号" },
+  { "category": "信息", "title": "分辨率", "command": "adb shell wm size", "note": "屏幕尺寸" },
+  { "category": "信息", "title": "密度", "command": "adb shell wm density", "note": "dpi" },
+
+  { "category": "权限", "title": "授予权限", "command": "adb shell pm grant com.example.app android.permission.CAMERA", "note": "运行时权限" },
+  { "category": "权限", "title": "撤销权限", "command": "adb shell pm revoke com.example.app android.permission.CAMERA", "note": "撤销运行时权限" },
+  { "category": "权限", "title": "应用权限列表", "command": "adb shell dumpsys package com.example.app | grep permission", "note": "粗查权限状态" }
+]

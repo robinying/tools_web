@@ -1,0 +1,74 @@
+[
+  {
+    "id": "keep-application",
+    "title": "保留 Application",
+    "tags": ["基础"],
+    "code": "-keep public class * extends android.app.Application"
+  },
+  {
+    "id": "keep-activity",
+    "title": "保留 Activity / Service / Receiver",
+    "tags": ["基础"],
+    "code": "-keep public class * extends android.app.Activity\n-keep public class * extends android.app.Service\n-keep public class * extends android.content.BroadcastReceiver\n-keep public class * extends android.content.ContentProvider"
+  },
+  {
+    "id": "keep-native",
+    "title": "保留 native 方法",
+    "tags": ["JNI"],
+    "code": "-keepclasseswithmembernames class * {\n    native <methods>;\n}"
+  },
+  {
+    "id": "keep-parcelable",
+    "title": "保留 Parcelable",
+    "tags": ["序列化"],
+    "code": "-keep class * implements android.os.Parcelable {\n    public static final android.os.Parcelable$Creator *;\n}"
+  },
+  {
+    "id": "keep-serializable",
+    "title": "保留 Serializable",
+    "tags": ["序列化"],
+    "code": "-keepclassmembers class * implements java.io.Serializable {\n    static final long serialVersionUID;\n    private static final java.io.ObjectStreamField[] serialPersistentFields;\n    private void writeObject(java.io.ObjectOutputStream);\n    private void readObject(java.io.ObjectInputStream);\n    java.lang.Object writeReplace();\n    java.lang.Object readResolve();\n}"
+  },
+  {
+    "id": "keep-enum",
+    "title": "保留枚举 values/valueOf",
+    "tags": ["基础"],
+    "code": "-keepclassmembers enum * {\n    public static **[] values();\n    public static ** valueOf(java.lang.String);\n}"
+  },
+  {
+    "id": "keep-jsinterface",
+    "title": "WebView JS 接口",
+    "tags": ["WebView"],
+    "code": "-keepclassmembers class * {\n    @android.webkit.JavascriptInterface <methods>;\n}"
+  },
+  {
+    "id": "keep-gson",
+    "title": "Gson 模型（示例包名）",
+    "tags": ["Gson", "JSON"],
+    "code": "-keepattributes Signature\n-keepattributes *Annotation*\n-keep class com.example.model.** { <fields>; }"
+  },
+  {
+    "id": "keep-retrofit",
+    "title": "Retrofit 接口",
+    "tags": ["网络"],
+    "code": "-keepattributes Signature, InnerClasses, EnclosingMethod\n-keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations\n-keepclassmembers,allowshrinking,allowobfuscation interface * {\n    @retrofit2.http.* <methods>;\n}"
+  },
+  {
+    "id": "keep-r8-fullmode",
+    "title": "R8 full mode 常见",
+    "tags": ["R8"],
+    "code": "-dontwarn javax.annotation.**\n-keepattributes SourceFile,LineNumberTable\n-renamesourcefileattribute SourceFile"
+  },
+  {
+    "id": "keep-line-numbers",
+    "title": "崩溃堆栈行号",
+    "tags": ["调试"],
+    "code": "-keepattributes SourceFile,LineNumberTable\n-renamesourcefileattribute SourceFile"
+  },
+  {
+    "id": "dontwarn-okhttp",
+    "title": "OkHttp dontwarn",
+    "tags": ["网络"],
+    "code": "-dontwarn okhttp3.**\n-dontwarn okio.**\n-dontwarn javax.annotation.**"
+  }
+]
