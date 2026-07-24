@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
 import ToolHeader from '../../components/ToolHeader.vue'
 import { copyText } from '../../utils/clipboard'
+import {
+  IMAGE_FILE_MAX_BYTES,
+  readImageDimensions,
+  scaleToMaxEdge,
+  validateFileSize,
+  validateImageDimensions,
+} from '../../utils/fileInputPolicy'
 
 const text = ref('https://example.com')
 const size = ref(280)
@@ -23,8 +30,14 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const scanning = ref(false)
 let stream: MediaStream | null = null
 let raf = 0
+let generateRequestId = 0
+let generateDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let fileDecodeOperationId = 0
+let cameraSessionId = 0
+let lastScanAt = 0
 
 async function generate() {
+  const requestId = ++generateRequestId
   genError.value = ''
   copied.value = ''
   const content = text.value
@@ -35,7 +48,7 @@ async function generate() {
   }
   genBusy.value = true
   try {
-    dataUrl.value = await QRCode.toDataURL(content, {
+    const nextDataUrl = await QRCode.toDataURL(content, {
       width: size.value,
       margin: 2,
       errorCorrectionLevel: level.value,
@@ -44,17 +57,25 @@ async function generate() {
         light: '#ffffff',
       },
     })
+    if (requestId === generateRequestId) dataUrl.value = nextDataUrl
   } catch (e) {
+    if (requestId !== generateRequestId) return
     dataUrl.value = ''
     genError.value = e instanceof Error ? e.message : '生成失败'
   } finally {
-    genBusy.value = false
+    if (requestId === generateRequestId) genBusy.value = false
   }
 }
 
-watch([text, size, level], () => {
-  void generate()
-}, { immediate: true })
+function scheduleGenerate() {
+  if (generateDebounceTimer) clearTimeout(generateDebounceTimer)
+  generateDebounceTimer = setTimeout(() => {
+    generateDebounceTimer = null
+    void generate()
+  }, 200)
+}
+
+watch([text, size, level], scheduleGenerate, { immediate: true })
 
 function revokePreview() {
   if (previewUrl.value) {
@@ -63,12 +84,25 @@ function revokePreview() {
   }
 }
 
+function stopWhenHidden() {
+  if (document.hidden) stopCamera()
+}
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', stopWhenHidden)
+  window.addEventListener('pagehide', stopCamera)
+})
+
 onBeforeUnmount(() => {
+  if (generateDebounceTimer) clearTimeout(generateDebounceTimer)
+  document.removeEventListener('visibilitychange', stopWhenHidden)
+  window.removeEventListener('pagehide', stopCamera)
   stopCamera()
   revokePreview()
 })
 
 async function decodeFromFile(file: File | null | undefined) {
+  const operationId = ++fileDecodeOperationId
   decodeError.value = ''
   decodeResult.value = ''
   revokePreview()
@@ -77,16 +111,28 @@ async function decodeFromFile(file: File | null | undefined) {
     decodeError.value = '请选择图片文件'
     return
   }
-  previewUrl.value = URL.createObjectURL(file)
+
+  const sizeError = validateFileSize(file, IMAGE_FILE_MAX_BYTES)
+  if (sizeError) {
+    decodeError.value = sizeError
+    return
+  }
+
   decodeBusy.value = true
   try {
-    const result = await decodeImageUrl(previewUrl.value)
+    const dimensions = await readImageDimensions(file)
+    const dimensionError = validateImageDimensions(dimensions)
+    if (dimensionError) throw new Error(dimensionError)
+    const result = await decodeImageFile(file, dimensions.width, dimensions.height)
+    if (operationId !== fileDecodeOperationId) return
+    previewUrl.value = URL.createObjectURL(file)
     if (result) decodeResult.value = result
     else decodeError.value = '未识别到二维码，请换更清晰的图或裁剪后再试'
   } catch (e) {
+    if (operationId !== fileDecodeOperationId) return
     decodeError.value = e instanceof Error ? e.message : '解析失败'
   } finally {
-    decodeBusy.value = false
+    if (operationId === fileDecodeOperationId) decodeBusy.value = false
   }
 }
 
@@ -100,56 +146,60 @@ function onDrop(e: DragEvent) {
   void decodeFromFile(e.dataTransfer?.files?.[0])
 }
 
-function decodeImageUrl(url: string): Promise<string | null> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas')
-        const maxSide = 1200
-        let w = img.naturalWidth || img.width
-        let h = img.naturalHeight || img.height
-        if (w > maxSide || h > maxSide) {
-          const scale = maxSide / Math.max(w, h)
-          w = Math.round(w * scale)
-          h = Math.round(h * scale)
-        }
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext('2d', { willReadFrequently: true })
-        if (!ctx) {
-          reject(new Error('Canvas 不可用'))
-          return
-        }
-        ctx.drawImage(img, 0, 0, w, h)
-        const imageData = ctx.getImageData(0, 0, w, h)
-        const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' })
-        resolve(code?.data ?? null)
-      } catch (err) {
-        reject(err)
-      }
-    }
-    img.onerror = () => reject(new Error('图片加载失败'))
-    img.src = url
+async function decodeImageFile(file: File, width: number, height: number): Promise<string | null> {
+  const target = scaleToMaxEdge({ width, height }, 1200)
+  if (!('createImageBitmap' in window)) {
+    throw new Error('当前浏览器不支持受限图片解码')
+  }
+  const bitmap = await createImageBitmap(file, {
+    resizeWidth: target.width,
+    resizeHeight: target.height,
+    resizeQuality: 'high',
   })
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) throw new Error('Canvas 不可用')
+    ctx.drawImage(bitmap, 0, 0)
+    const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
+    return jsQR(imageData.data, bitmap.width, bitmap.height, { inversionAttempts: 'attemptBoth' })?.data ?? null
+  } finally {
+    bitmap.close()
+  }
 }
 
 async function startCamera() {
-  decodeError.value = ''
-  decodeResult.value = ''
   stopCamera()
+  const sessionId = cameraSessionId
+  decodeError.value = ''
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    const nextStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' } },
       audio: false,
     })
+    if (sessionId !== cameraSessionId) {
+      nextStream.getTracks().forEach((track) => track.stop())
+      return
+    }
     const video = videoRef.value
-    if (!video) throw new Error('视频组件未就绪')
+    if (!video) {
+      nextStream.getTracks().forEach((track) => track.stop())
+      throw new Error('视频组件未就绪')
+    }
+    stream = nextStream
     video.srcObject = stream
     await video.play()
+    if (sessionId !== cameraSessionId) {
+      stopCamera()
+      return
+    }
+    lastScanAt = 0
     scanning.value = true
     tickScan()
   } catch (e) {
+    if (sessionId !== cameraSessionId) return
     scanning.value = false
     decodeError.value =
       e instanceof Error
@@ -159,6 +209,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  cameraSessionId++
   scanning.value = false
   if (raf) {
     cancelAnimationFrame(raf)
@@ -174,21 +225,23 @@ function stopCamera() {
   }
 }
 
-function tickScan() {
+function tickScan(timestamp = performance.now()) {
   if (!scanning.value) return
   const video = videoRef.value
   const canvas = canvasRef.value
-  if (video && canvas && video.readyState >= 2) {
-    const w = video.videoWidth
-    const h = video.videoHeight
-    if (w && h) {
-      canvas.width = w
-      canvas.height = h
+  if (video && canvas && video.readyState >= 2 && timestamp - lastScanAt >= 100) {
+    const target = scaleToMaxEdge({ width: video.videoWidth, height: video.videoHeight }, 720)
+    if (target.width && target.height) {
+      if (canvas.width !== target.width || canvas.height !== target.height) {
+        canvas.width = target.width
+        canvas.height = target.height
+      }
       const ctx = canvas.getContext('2d', { willReadFrequently: true })
       if (ctx) {
-        ctx.drawImage(video, 0, 0, w, h)
-        const imageData = ctx.getImageData(0, 0, w, h)
-        const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' })
+        ctx.drawImage(video, 0, 0, target.width, target.height)
+        const imageData = ctx.getImageData(0, 0, target.width, target.height)
+        const code = jsQR(imageData.data, target.width, target.height, { inversionAttempts: 'attemptBoth' })
+        lastScanAt = timestamp
         if (code?.data) {
           decodeResult.value = code.data
           decodeError.value = ''
@@ -276,7 +329,7 @@ function useDecodedAsGenerate() {
         @drop.prevent="onDrop"
       >
         <p><strong>拖拽二维码图片到此处</strong>，或选择文件</p>
-        <p class="hint">PNG / JPG / WebP · 纯本地 jsQR 解析</p>
+        <p class="hint">PNG / JPG / WebP · 纯本地 jsQR 解析 · 单个文件最大 25 MiB，图片最大 24 MP</p>
         <label class="btn btn-primary" style="margin-top: 0.75rem">
           选择图片
           <input type="file" accept="image/*" @change="onFileChange" />

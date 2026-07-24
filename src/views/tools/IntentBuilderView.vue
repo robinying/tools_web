@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import ToolHeader from '../../components/ToolHeader.vue'
 import { copyText } from '../../utils/clipboard'
+import { buildAmStartCommand, buildIntentUri } from '../../utils/adbCommand'
 
 const action = ref('android.intent.action.VIEW')
 const dataUri = ref('https://example.com/path?x=1')
@@ -21,65 +22,21 @@ const commonActions = [
   'android.settings.APPLICATION_DETAILS_SETTINGS',
 ]
 
-const amStart = computed(() => {
-  const parts = ['adb shell am start']
-  if (action.value.trim()) parts.push('-a', shellQuote(action.value.trim()))
-  if (dataUri.value.trim()) parts.push('-d', shellQuote(dataUri.value.trim()))
-  if (category.value.trim()) parts.push('-c', shellQuote(category.value.trim()))
-  if (component.value.trim()) parts.push('-n', shellQuote(component.value.trim()))
-  else if (packageName.value.trim()) parts.push(shellQuote(packageName.value.trim()))
-  for (const line of extras.value.split('\n')) {
-    const t = line.trim()
-    if (!t || !t.includes('=')) continue
-    const i = t.indexOf('=')
-    const k = t.slice(0, i).trim()
-    const v = t.slice(i + 1).trim()
-    parts.push('--es', shellQuote(k), shellQuote(v))
-  }
-  if (flags.value.trim()) parts.push(flags.value.trim())
-  return parts.join(' ')
-})
+const options = computed(() => ({
+  action: action.value,
+  dataUri: dataUri.value,
+  packageName: packageName.value,
+  component: component.value,
+  category: category.value,
+  extras: extras.value,
+  flags: flags.value,
+}))
 
-const intentUri = computed(() => {
-  // intent://host/path#Intent;scheme=https;action=...;end
-  try {
-    const raw = dataUri.value.trim()
-    let hostPath = ''
-    let scheme = 'https'
-    if (raw) {
-      try {
-        const u = new URL(raw)
-        scheme = u.protocol.replace(':', '') || 'https'
-        hostPath = `${u.host}${u.pathname}${u.search}${u.hash}`
-      } catch {
-        hostPath = raw.replace(/^[a-z]+:\/\//i, '')
-      }
-    }
-    const segs = [`intent://${hostPath}#Intent`]
-    segs.push(`scheme=${scheme}`)
-    if (action.value.trim()) segs.push(`action=${action.value.trim()}`)
-    if (packageName.value.trim()) segs.push(`package=${packageName.value.trim()}`)
-    if (component.value.trim()) segs.push(`component=${component.value.trim()}`)
-    if (category.value.trim()) segs.push(`category=${category.value.trim()}`)
-    for (const line of extras.value.split('\n')) {
-      const t = line.trim()
-      if (!t || !t.includes('=')) continue
-      const i = t.indexOf('=')
-      const k = t.slice(0, i).trim()
-      const v = t.slice(i + 1).trim()
-      segs.push(`S.${k}=${encodeURIComponent(v)}`)
-    }
-    segs.push('end')
-    return segs.join(';')
-  } catch {
-    return ''
-  }
-})
-
-function shellQuote(s: string): string {
-  if (/[\s"$`\\]/.test(s)) return `"${s.replace(/(["\\$`])/g, '\\$1')}"`
-  return s
-}
+const amStartResult = computed(() => buildAmStartCommand(options.value))
+const intentUriResult = computed(() => buildIntentUri(options.value))
+const amStart = computed(() => amStartResult.value.command)
+const intentUri = computed(() => intentUriResult.value.uri)
+const inputError = computed(() => amStartResult.value.error ?? intentUriResult.value.error)
 
 async function copy(text: string, label: string) {
   const ok = await copyText(text)
@@ -130,20 +87,22 @@ async function copy(text: string, label: string) {
           />
         </div>
         <div>
-          <label class="field-label" for="flags">额外 flags 片段（可选）</label>
-          <input id="flags" v-model="flags" class="input mono" placeholder="-f 0x10000000" />
+          <label class="field-label" for="flags">Intent flag（可选）</label>
+          <input id="flags" v-model="flags" class="input mono" placeholder="0x10000000" />
         </div>
       </div>
       <div style="margin-top: 0.85rem">
         <label class="field-label" for="extras">Extras（每行 key=value，按 String）</label>
         <textarea id="extras" v-model="extras" class="textarea" rows="3" placeholder="from=tool" />
       </div>
+      <p v-if="inputError" class="error-text">{{ inputError }}</p>
+      <p class="hint">仅复制并执行已自行核验的命令；输入会作为参数安全引用，Intent flag 仅支持数值位掩码。</p>
     </div>
 
     <div class="tool-panel">
       <div class="toolbar">
         <strong>am start</strong>
-        <button type="button" class="btn" @click="copy(amStart, 'am start')">复制</button>
+        <button type="button" class="btn" :disabled="!amStart" @click="copy(amStart, 'am start')">复制</button>
         <span v-if="copied" class="success-text">{{ copied }}</span>
       </div>
       <pre class="out mono">{{ amStart }}</pre>
@@ -152,7 +111,7 @@ async function copy(text: string, label: string) {
     <div class="tool-panel">
       <div class="toolbar">
         <strong>intent:// URI</strong>
-        <button type="button" class="btn" @click="copy(intentUri, 'intent URI')">复制</button>
+        <button type="button" class="btn" :disabled="!intentUri" @click="copy(intentUri, 'intent URI')">复制</button>
       </div>
       <pre class="out mono">{{ intentUri }}</pre>
       <p class="hint">可用 Chrome：

@@ -3,6 +3,12 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import exifr from 'exifr'
 import ToolHeader from '../../components/ToolHeader.vue'
 import { copyText } from '../../utils/clipboard'
+import {
+  IMAGE_FILE_MAX_BYTES,
+  readImageDimensions,
+  validateFileSize,
+  validateImageDimensions,
+} from '../../utils/fileInputPolicy'
 
 interface FlatEntry {
   key: string
@@ -18,7 +24,9 @@ const error = ref('')
 const dragOver = ref(false)
 const filter = ref('')
 const copied = ref(false)
+const copiedAll = ref(false)
 const parsing = ref(false)
+let parseOperationId = 0
 
 const filtered = computed(() => {
   const q = filter.value.trim().toLowerCase()
@@ -36,8 +44,31 @@ function revokePreview() {
 }
 
 onBeforeUnmount(() => {
+  parseOperationId++
   revokePreview()
 })
+
+function isSensitiveMetadataKey(key: string): boolean {
+  return /gps|latitude|longitude|altitude|location|make|model|serial|owner|imageuniqueid|software|date|time/i.test(key)
+}
+
+function redactMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactMetadata)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !isSensitiveMetadataKey(key))
+      .map(([key, nestedValue]) => [key, redactMetadata(nestedValue)]),
+  )
+}
+
+function stringifyMetadata(value: unknown): string {
+  return JSON.stringify(value, (_key, nestedValue) => {
+    if (nestedValue instanceof Date) return nestedValue.toISOString()
+    if (typeof nestedValue === 'bigint') return nestedValue.toString()
+    return nestedValue
+  }, 2)
+}
 
 function formatValue(v: unknown): string {
   if (v == null) return ''
@@ -60,8 +91,10 @@ function flatten(obj: Record<string, unknown>): FlatEntry[] {
 }
 
 async function handleFile(file: File | null | undefined) {
+  const operationId = ++parseOperationId
   error.value = ''
   copied.value = false
+  copiedAll.value = false
   entries.value = []
   rawJson.value = ''
   revokePreview()
@@ -73,12 +106,18 @@ async function handleFile(file: File | null | undefined) {
     return
   }
 
-  fileName.value = file.name
-  fileSize.value = file.size
-  previewUrl.value = URL.createObjectURL(file)
-  parsing.value = true
+  const sizeError = validateFileSize(file, IMAGE_FILE_MAX_BYTES)
+  if (sizeError) {
+    error.value = sizeError
+    return
+  }
 
+  parsing.value = true
   try {
+    const dimensions = await readImageDimensions(file)
+    const dimensionError = validateImageDimensions(dimensions)
+    if (dimensionError) throw new Error(dimensionError)
+
     const data = await exifr.parse(file, {
       tiff: true,
       xmp: true,
@@ -94,25 +133,24 @@ async function handleFile(file: File | null | undefined) {
       sanitize: true,
       mergeOutput: true,
     })
+    if (operationId !== parseOperationId) return
 
+    fileName.value = file.name
+    fileSize.value = file.size
+    previewUrl.value = URL.createObjectURL(file)
     if (!data || Object.keys(data).length === 0) {
       error.value = '未解析到 EXIF / 元数据（部分截图或导出图可能已剥离元数据）'
-      entries.value = []
-      rawJson.value = ''
       return
     }
 
     const record = data as Record<string, unknown>
     entries.value = flatten(record)
-    rawJson.value = JSON.stringify(record, (_k, v) => {
-      if (v instanceof Date) return v.toISOString()
-      if (typeof v === 'bigint') return v.toString()
-      return v
-    }, 2)
+    rawJson.value = stringifyMetadata(record)
   } catch (e) {
+    if (operationId !== parseOperationId) return
     error.value = e instanceof Error ? e.message : '解析失败'
   } finally {
-    parsing.value = false
+    if (operationId === parseOperationId) parsing.value = false
   }
 }
 
@@ -129,13 +167,16 @@ function onDrop(e: DragEvent) {
   void handleFile(file)
 }
 
-async function copyJson() {
+async function copyJson(includeSensitive: boolean) {
   if (!rawJson.value) return
-  const ok = await copyText(rawJson.value)
-  copied.value = ok
+  const text = includeSensitive ? rawJson.value : stringifyMetadata(redactMetadata(JSON.parse(rawJson.value)))
+  const ok = await copyText(text)
+  if (includeSensitive) copiedAll.value = ok
+  else copied.value = ok
 }
 
 function clearAll() {
+  parseOperationId++
   fileName.value = ''
   fileSize.value = 0
   entries.value = []
@@ -143,6 +184,7 @@ function clearAll() {
   error.value = ''
   filter.value = ''
   copied.value = false
+  copiedAll.value = false
   revokePreview()
 }
 
@@ -169,7 +211,7 @@ function humanSize(n: number): string {
         @drop.prevent="onDrop"
       >
         <p><strong>拖拽图片到此处</strong>，或点击选择文件</p>
-        <p class="hint">JPEG / TIFF / HEIC / PNG / WebP · 纯本地解析 · 依赖已打包进站点</p>
+        <p class="hint">JPEG / TIFF / HEIC / PNG / WebP · 纯本地解析 · 单个文件最大 25 MiB，图片最大 24 MP</p>
         <label class="btn btn-primary" style="margin-top: 0.9rem">
           选择图片
           <input type="file" accept="image/*,.heic,.heif,.tif,.tiff" @change="onInputChange" />
@@ -206,12 +248,17 @@ function humanSize(n: number): string {
           type="search"
           placeholder="过滤字段名 / 值…"
         />
-        <button type="button" class="btn" :disabled="!rawJson" @click="copyJson">
-          复制 JSON
+        <button type="button" class="btn" :disabled="!rawJson" @click="copyJson(false)">
+          复制脱敏 JSON
         </button>
-        <span v-if="copied" class="success-text">已复制</span>
+        <button type="button" class="btn btn-ghost" :disabled="!rawJson" @click="copyJson(true)">
+          复制全部元数据
+        </button>
+        <span v-if="copied" class="success-text">已复制脱敏 JSON</span>
+        <span v-if="copiedAll" class="success-text">已复制全部元数据</span>
         <span class="faint">显示 {{ filtered.length }} / {{ entries.length }}</span>
       </div>
+      <p class="hint">脱敏复制会移除位置、设备和时间字段；“复制全部元数据”可能包含敏感信息。</p>
 
       <div class="table-wrap" style="max-height: 480px">
         <table class="data">
@@ -223,7 +270,7 @@ function humanSize(n: number): string {
           </thead>
           <tbody>
             <tr v-for="item in filtered" :key="item.key">
-              <td>{{ item.key }}</td>
+              <td :class="{ sensitive: isSensitiveMetadataKey(item.key) }">{{ item.key }}</td>
               <td class="mono">{{ item.value }}</td>
             </tr>
           </tbody>
@@ -234,6 +281,10 @@ function humanSize(n: number): string {
 </template>
 
 <style scoped>
+.sensitive {
+  color: var(--warning);
+}
+
 .file-meta {
   margin-top: 1rem;
   display: flex;

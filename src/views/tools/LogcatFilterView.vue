@@ -2,6 +2,11 @@
 import { computed, ref } from 'vue'
 import ToolHeader from '../../components/ToolHeader.vue'
 import { copyText } from '../../utils/clipboard'
+import {
+  buildLogcatCommand,
+  buildTagFilter,
+  getLogcatPackageError,
+} from '../../utils/adbCommand'
 
 const packageName = ref('com.example.app')
 const tags = ref('MyTag,OkHttp')
@@ -13,43 +18,23 @@ const copied = ref('')
 
 const priorities = ['V', 'D', 'I', 'W', 'E', 'F']
 
-const tagFilterExpr = computed(() => {
-  const list = tags.value
-    .split(/[,，\s]+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-  if (!list.length) return '*:V'
-  const parts = list.map((t) => `${t}:${priority.value}`)
-  // silence others
-  return `${parts.join(' ')} *:S`
-})
+const tagFilterExpr = computed(() => buildTagFilter(tags.value, priority.value))
 
-const command = computed(() => {
-  const parts: string[] = ['adb']
-  if (clearFirst.value) {
-    // multi-command hint
-  }
-  if (usePid.value && packageName.value.trim()) {
-    const pkg = packageName.value.trim()
-    parts.push(
-      `logcat --pid=$(adb shell pidof -s ${pkg})`,
-    )
-  } else {
-    parts.push('logcat')
-    if (buffer.value && buffer.value !== 'main') {
-      parts.push('-b', buffer.value)
-    }
-    parts.push(tagFilterExpr.value)
-  }
-  const cmd = parts.join(' ')
-  if (clearFirst.value) return `adb logcat -c && ${cmd}`
-  return cmd
-})
+const packageError = computed(() => getLogcatPackageError({
+  packageName: packageName.value,
+  usePid: usePid.value,
+}))
 
-const amFilterHint = computed(() => {
-  // classic filter format for non-pid
-  return tagFilterExpr.value
-})
+const command = computed(() => buildLogcatCommand({
+  packageName: packageName.value,
+  tags: tags.value,
+  priority: priority.value,
+  buffer: buffer.value,
+  usePid: usePid.value,
+  clearFirst: clearFirst.value,
+}))
+
+const amFilterHint = computed(() => tagFilterExpr.value)
 
 async function copy() {
   const ok = await copyText(command.value)
@@ -82,7 +67,7 @@ async function copy() {
         </div>
         <div>
           <label class="field-label" for="buf">Buffer</label>
-          <select id="buf" v-model="buffer" class="select" :disabled="usePid">
+          <select id="buf" v-model="buffer" class="select">
             <option value="main">main</option>
             <option value="system">system</option>
             <option value="crash">crash</option>
@@ -101,19 +86,21 @@ async function copy() {
           先 logcat -c 清空
         </label>
       </div>
+      <p v-if="packageError" class="error-text">{{ packageError }}</p>
+      <p v-else-if="usePid" class="hint">PID 模式会同时应用 Buffer 与 Tag 过滤；目标进程须已运行，且只匹配一个进程。</p>
     </div>
 
     <div class="tool-panel">
       <div class="toolbar">
         <strong>生成命令</strong>
-        <button type="button" class="btn btn-primary" @click="copy">复制</button>
+        <button type="button" class="btn btn-primary" :disabled="Boolean(packageError)" @click="copy">复制</button>
         <span v-if="copied" class="success-text">{{ copied }}</span>
       </div>
       <pre class="out mono">{{ command }}</pre>
       <p class="hint">
         Tag 表达式：
         <code>{{ amFilterHint }}</code>
-        （PID 模式下由系统按进程过滤，tag 表达式可不使用）
+        （PID 模式下仍会叠加此 Tag 表达式）
       </p>
     </div>
   </div>

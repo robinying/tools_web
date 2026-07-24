@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import ToolHeader from '../../components/ToolHeader.vue'
 import { type HashAlgo, hashBytes, hashText } from '../../utils/hash'
 import { copyText } from '../../utils/clipboard'
+import { HASH_FILE_MAX_BYTES, validateFileSize } from '../../utils/fileInputPolicy'
 
 const source = ref<'text' | 'file'>('text')
 const text = ref('hello')
@@ -12,6 +13,7 @@ const error = ref('')
 const fileName = ref('')
 const busy = ref(false)
 const copied = ref('')
+let fileOperationId = 0
 
 async function compute() {
   error.value = ''
@@ -33,18 +35,34 @@ async function onFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   ;(e.target as HTMLInputElement).value = ''
   if (!file) return
+
+  const sizeError = validateFileSize(file, HASH_FILE_MAX_BYTES)
+  if (sizeError) {
+    fileOperationId++
+    source.value = 'file'
+    fileName.value = ''
+    result.value = ''
+    error.value = `${sizeError}，当前哈希实现会完整读取文件到内存`
+    return
+  }
+
+  const operationId = ++fileOperationId
   fileName.value = file.name
   source.value = 'file'
   error.value = ''
+  result.value = ''
   busy.value = true
   try {
     const buf = await file.arrayBuffer()
-    result.value = await hashBytes(algo.value, buf)
+    const digest = await hashBytes(algo.value, buf)
+    if (operationId !== fileOperationId) return
+    result.value = digest
   } catch (err) {
+    if (operationId !== fileOperationId) return
     result.value = ''
     error.value = err instanceof Error ? err.message : '文件哈希失败'
   } finally {
-    busy.value = false
+    if (operationId === fileOperationId) busy.value = false
   }
 }
 
@@ -54,7 +72,9 @@ watch([text, algo, source], () => {
 
 watch(algo, () => {
   if (source.value === 'file' && fileName.value) {
-    // recompute needs file again — user reselects; only auto for text
+    fileOperationId++
+    result.value = ''
+    error.value = '切换算法后请重新选择文件'
   }
 })
 
@@ -85,7 +105,7 @@ async function copy() {
           选择文件
           <input type="file" hidden @change="onFile" />
         </label>
-        <button type="button" class="btn btn-ghost" @click="source = 'text'; void compute()">
+        <button type="button" class="btn btn-ghost" @click="fileOperationId++; source = 'text'; void compute()">
           改用文本
         </button>
         <button type="button" class="btn" :disabled="!result" @click="copy">复制</button>
@@ -103,6 +123,7 @@ async function copy() {
       <input class="input mono" readonly :value="result" />
       <p v-if="error" class="error-text">{{ error }}</p>
       <p class="hint">MD5/SHA-1 仅用于兼容校验，安全场景请用 SHA-256。</p>
+      <p class="hint">文件仅在本地读取；为避免浏览器内存耗尽，单个文件上限为 50 MiB。</p>
     </div>
   </div>
 </template>

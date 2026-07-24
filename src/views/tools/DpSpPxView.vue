@@ -1,55 +1,26 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import ToolHeader from '../../components/ToolHeader.vue'
-
-interface Density {
-  name: string
-  bucket: string
-  densityDpi: number
-  scale: number
-}
-
-const densities: Density[] = [
-  { name: 'ldpi', bucket: 'ldpi', densityDpi: 120, scale: 0.75 },
-  { name: 'mdpi (基准)', bucket: 'mdpi', densityDpi: 160, scale: 1 },
-  { name: 'hdpi', bucket: 'hdpi', densityDpi: 240, scale: 1.5 },
-  { name: 'xhdpi', bucket: 'xhdpi', densityDpi: 320, scale: 2 },
-  { name: 'xxhdpi', bucket: 'xxhdpi', densityDpi: 480, scale: 3 },
-  { name: 'xxxhdpi', bucket: 'xxxhdpi', densityDpi: 640, scale: 4 },
-]
+import {
+  buildDensityRows,
+  isValidDensityValue,
+  isValidFontScale,
+  MAX_FONT_SCALE,
+  MIN_FONT_SCALE,
+} from '../../utils/density'
 
 const mode = ref<'dp' | 'px'>('dp')
 const value = ref(16)
 const fontScale = ref(1)
 
-const rows = computed(() => {
-  const v = Number(value.value)
-  if (!Number.isFinite(v)) return []
-
-  return densities.map((d) => {
-    if (mode.value === 'dp') {
-      const px = v * d.scale
-      const spPx = v * d.scale * fontScale.value
-      return {
-        ...d,
-        dp: v,
-        px: round(px),
-        spAsPx: round(spPx),
-      }
-    }
-    const dp = v / d.scale
-    return {
-      ...d,
-      dp: round(dp),
-      px: v,
-      spAsPx: round(dp * d.scale * fontScale.value),
-    }
-  })
-})
-
-function round(n: number): number {
-  return Math.round(n * 100) / 100
-}
+const isFontScaleValid = computed(() => isValidFontScale(fontScale.value))
+const valueError = computed(() => (
+  isValidDensityValue(value.value) ? '' : '请输入有限数值'
+))
+const fontScaleError = computed(() => (
+  isFontScaleValid.value ? '' : `请输入 ${MIN_FONT_SCALE} 到 ${MAX_FONT_SCALE} 之间的有限数值`
+))
+const rows = computed(() => buildDensityRows(mode.value, value.value, fontScale.value) ?? [])
 </script>
 
 <template>
@@ -70,7 +41,8 @@ function round(n: number): number {
         </div>
         <div>
           <label class="field-label" for="unit-value">数值</label>
-          <input id="unit-value" v-model.number="value" class="input mono" type="number" step="any" />
+          <input id="unit-value" v-model.number="value" class="input mono" type="number" step="any" :aria-invalid="Boolean(valueError)" />
+          <p v-if="valueError" class="error-text" role="alert">{{ valueError }}</p>
         </div>
         <div>
           <label class="field-label" for="font-scale">字体缩放 fontScale（影响 sp→px）</label>
@@ -79,10 +51,12 @@ function round(n: number): number {
             v-model.number="fontScale"
             class="input mono"
             type="number"
-            min="0.5"
-            max="2"
+            :min="MIN_FONT_SCALE"
+            :max="MAX_FONT_SCALE"
             step="0.05"
+            :aria-invalid="Boolean(fontScaleError)"
           />
+          <p v-if="fontScaleError" class="error-text" role="alert">{{ fontScaleError }}</p>
         </div>
       </div>
       <p class="hint" style="margin-top: 0.85rem">

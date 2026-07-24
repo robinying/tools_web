@@ -30,6 +30,14 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Unit tests
+        run: npm test
+
+      - name: Verify root-site asset paths
+        run: |
+          GITHUB_PAGES_BASE=/ npm run build
+          grep -F 'href="/favicon.svg"' dist/index.html
+
       - name: Build
         run: npm run build
         env:
