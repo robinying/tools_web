@@ -34,6 +34,22 @@ export const tools: ToolMeta[] = [
   },
 
   {
+    id: 'image-compress',
+    name: '图片压缩',
+    description: '本地缩放、压缩并导出 JPEG / PNG / WebP 图片。',
+    path: '/image-compress',
+    tags: ['图片'],
+    accent: '#0ea5e9',
+  },
+  {
+    id: 'image-watermark',
+    name: '图片加水印',
+    description: '在本地为图片添加文字或 Logo 水印并导出。',
+    path: '/image-watermark',
+    tags: ['图片'],
+    accent: '#ec4899',
+  },
+  {
     id: 'dp-sp-px',
     name: 'dp / sp / px',
     description: 'Android 密度单位换算，按常用 density 快速对照。',

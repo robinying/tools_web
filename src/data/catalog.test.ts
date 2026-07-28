@@ -23,6 +23,8 @@ describe('tools catalog', () => {
         'base-converter',
         'exif-reader',
         'qr-tool',
+        'image-compress',
+        'image-watermark',
         'dp-sp-px',
         'permissions',
         'adb-cheatsheet',

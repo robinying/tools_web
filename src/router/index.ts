@@ -30,6 +30,18 @@ const router = createRouter({
     },
 
     {
+      path: '/image-compress',
+      name: 'image-compress',
+      component: () => import('../views/tools/ImageCompressView.vue'),
+      meta: { title: '图片压缩' },
+    },
+    {
+      path: '/image-watermark',
+      name: 'image-watermark',
+      component: () => import('../views/tools/ImageWatermarkView.vue'),
+      meta: { title: '图片加水印' },
+    },
+    {
       path: '/dp-sp-px',
       name: 'dp-sp-px',
       component: () => import('../views/tools/DpSpPxView.vue'),

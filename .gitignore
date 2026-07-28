@@ -22,4 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-docs/code-audit-report.md
+docs/*
+CLAUDE.md

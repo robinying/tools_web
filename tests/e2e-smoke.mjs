@@ -15,6 +15,8 @@ const routes = [
   ['/base-converter', ['进制转换', '二进制', '十六进制']],
   ['/exif-reader', ['EXIF 读取', '选择图片']],
   ['/qr-tool', ['二维码', '生成', '解析']],
+  ['/image-compress', ['图片压缩', '选择图片', '导出格式']],
+  ['/image-watermark', ['图片加水印', '选择原始图片', '文字水印']],
   ['/dp-sp-px', ['dp / sp / px', 'xxhdpi']],
   ['/permissions', ['权限速查', 'INTERNET']],
   ['/adb-cheatsheet', ['adb 命令速查', 'adb devices']],
@@ -108,6 +110,22 @@ function buildJpegWithExif() {
   return Buffer.concat([Buffer.from([0xff, 0xd8]), app1, Buffer.from([0xff, 0xd9])])
 }
 
+function buildPng() {
+  return Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M/wHwMDAwMTAwMAAAsAAQb3V9YAAAAASUVORK5CYII=',
+    'base64',
+  )
+}
+
+async function uploadAndClick(filePath, inputSelector, buttonSelector) {
+  const upload = await run('agent-browser', ['upload', inputSelector, filePath])
+  if (upload.code !== 0) throw new Error(upload.err || upload.out)
+  await sleep(300)
+  const click = await run('agent-browser', ['click', buttonSelector])
+  if (click.code !== 0) throw new Error(click.err || click.out)
+  await sleep(600)
+}
+
 async function main() {
   console.log(`E2E smoke against ${base}`)
 
@@ -139,6 +157,41 @@ async function main() {
   } finally {
     try {
       unlinkSync(jpegPath)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  text = await openHash('/image-compress')
+  const pngPath = join(tmpdir(), `tools_web_e2e_${Date.now()}.png`)
+  writeFileSync(pngPath, buildPng())
+  try {
+    await uploadAndClick(pngPath, '#compress-source-input', '#compress-run')
+    text = await pageText()
+    assertIncludes(text, ['压缩完成'], 'image-compress output')
+
+    text = await openHash('/image-watermark')
+    await uploadAndClick(pngPath, '#watermark-source-input', '#watermark-run')
+    text = await pageText()
+    assertIncludes(text, ['水印已生成'], 'image-watermark text output')
+
+    text = await openHash('/image-watermark')
+    const sourceUpload = await run('agent-browser', ['upload', '#watermark-source-input', pngPath])
+    if (sourceUpload.code !== 0) throw new Error(sourceUpload.err || sourceUpload.out)
+    await sleep(300)
+    const textClear = await run('agent-browser', ['fill', '#watermark-text', ''])
+    if (textClear.code !== 0) throw new Error(textClear.err || textClear.out)
+    const markUpload = await run('agent-browser', ['upload', '#watermark-image-input', pngPath])
+    if (markUpload.code !== 0) throw new Error(markUpload.err || markUpload.out)
+    await sleep(300)
+    const markClick = await run('agent-browser', ['click', '#watermark-run'])
+    if (markClick.code !== 0) throw new Error(markClick.err || markClick.out)
+    await sleep(600)
+    text = await pageText()
+    assertIncludes(text, ['水印已生成'], 'image-watermark image output')
+  } finally {
+    try {
+      unlinkSync(pngPath)
     } catch {
       /* ignore */
     }
