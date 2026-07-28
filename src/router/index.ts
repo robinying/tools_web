@@ -42,6 +42,42 @@ const router = createRouter({
       meta: { title: '图片加水印' },
     },
     {
+      path: '/logcat-analyzer',
+      name: 'logcat-analyzer',
+      component: () => import('../views/tools/LogcatAnalyzerView.vue'),
+      meta: { title: 'Logcat 日志分析' },
+    },
+    {
+      path: '/mapping-retrace',
+      name: 'mapping-retrace',
+      component: () => import('../views/tools/MappingRetraceView.vue'),
+      meta: { title: 'R8 / ProGuard Retrace' },
+    },
+    {
+      path: '/manifest-security',
+      name: 'manifest-security',
+      component: () => import('../views/tools/ManifestSecurityView.vue'),
+      meta: { title: 'Manifest 安全检查' },
+    },
+    {
+      path: '/android-icon-generator',
+      name: 'android-icon-generator',
+      component: () => import('../views/tools/AndroidIconGeneratorView.vue'),
+      meta: { title: 'Android 图标生成' },
+    },
+    {
+      path: '/json-kotlin-generator',
+      name: 'json-kotlin-generator',
+      component: () => import('../views/tools/JsonKotlinGeneratorView.vue'),
+      meta: { title: 'JSON 转 Kotlin' },
+    },
+    {
+      path: '/app-links-assistant',
+      name: 'app-links-assistant',
+      component: () => import('../views/tools/AppLinksAssistantView.vue'),
+      meta: { title: 'App Links 测试' },
+    },
+    {
       path: '/dp-sp-px',
       name: 'dp-sp-px',
       component: () => import('../views/tools/DpSpPxView.vue'),

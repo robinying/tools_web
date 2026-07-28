@@ -21,6 +21,12 @@ https://<你的用户名>.github.io/tools_web/
 | **二维码生成 / 解析** | 生成 PNG；图片 / 摄像头识别 |
 | **图片压缩** | 本地缩放、压缩并导出 JPEG / PNG / WebP |
 | **图片加水印** | 本地添加文字或 Logo 水印并导出 |
+| **Logcat 日志分析** | 本地提取崩溃、ANR、Native 与网络异常 |
+| **R8 / ProGuard Retrace** | 使用 mapping.txt 本地反混淆堆栈 |
+| **Manifest 安全检查** | 检查导出组件、权限与网络配置 |
+| **Android 图标生成** | 生成 mipmap 密度图标与 Adaptive Icon XML |
+| **JSON 转 Kotlin data class** | 从样例 JSON 生成 Kotlin 数据类 |
+| **Deep Link / App Links 测试** | 生成 adb 命令并检查 assetlinks 配置 |
 | **dp / sp / px** | 密度单位换算 |
 | **权限速查** | 常用权限说明搜索 |
 | **adb 命令速查** | 常用 adb / am / pm |
